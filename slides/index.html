@@ -54,8 +54,10 @@
         <h2>
           <img
             src="tweet.png" style="font-size: 75.96px; width: 574px;">
-          <br>
         </h2>
+        <aside class="notes">
+          
+        </aside>
       </section>
 
 
@@ -460,12 +462,59 @@ with timeout(.1, TimeoutException):
       </section>
 
       <section>
-        <h2>Nesting</h2>
+        <h2>Final thoughts</h2>
 
         <aside class="notes">
-            It is reentrant and supports arbitrary nesting of independant timeouts.
-            This allows us to 
+          I'm not advocating you should wrap everything in timeouts. Not
+          every problem lends itself to it. Sometimes there is simply no useful
+          degraded or partial representation.
+          
+          However, the point I want to make is that the best way to guarantee
+          responsive web apps is to not have any code with dynamic,
+          unpredictable execution time.
+          
+          This is a very hard problem and probably something that many of you,
+          myself included, will continue to face throughout your careers. There
+          is no one-size-fits-all solution and you should continue to do what
+          you have done in the past.
+          
+          Refactor your code when possible. Don't make redundant database
+          queries.
+          
+          Always apply pagination.
+          
+          When performing network IO, use sensible socket timeouts and
+          
+          even drop functionality you cannot predict the execution time for.
+          
+          However, interrupt-driven time-boxing can add to this bag of tricks,
+          as it offers some unique properties:
+          
+          It works with existing code and libraries. Stuff for which
+          refactoring is prohibitively expensive.
+          
+          Offers a generic approach to different kinds of bottlenecks, whether
+          they're IO- or CPU-bound.
+          It allows for an optimistic approach where unpredictable code does
+          not have to be banished altogether, but can continue to be used safely.
+          
+          Finally, time-based programming has the interesting characteristic
+          that it reacts well under high load. When high server load causes
+          programs to run more slowly, time-boxing helps prevent a buildup
+          of pending jobs and requests and response times do not suffer.
         </aside>
+      </section>
+      
+      <section>
+        <ul style="margin-top: 100px;">
+          <li><b>Interruptingcow</b> &mdash; time-box arbitrary Python code<br>
+            <a href="https://bitbucket.org/evzijst/interruptingcow">bitbucket.org/evzijst/interruptingcow</a></li>
+          <li><b>django-timelimit</b> &mdash; time-box Django template fragments<br>
+            <a href="https://bitbucket.org/evzijst/django-timelimit">bitbucket.org/evzijst/django-timelimit</a></li>
+        </ul>
+        <p style="margin-top: 100px;">Slides at:</p>
+            <a href="http://evzijst.bitbucket.org/pycon.au/index.html">evzijst.bitbucket.org/pycon.au</a>
+            <p><a href="https://twitter.com/erikvanzijst">@erikvanzijst</a></p>
       </section>
     </div>
 
