@@ -15,8 +15,9 @@ data denormalization and instead look at tools that can interrupt execution of
 overly expensive code paths, such that you can guarantee an upper bound in
 response time.
 
-Interruptingcow and django-timelimit will be some of the tools that will be
-covered in this talk.
+[Interruptingcow](https://bitbucket.org/evzijst/interruptingcow) and
+[django-timelimit](https://bitbucket.org/evzijst/django-timelimit) will be some
+of the tools that will be covered in this talk.
 
 The context for most of this is web applications, and I'll be drawing many
 examples from our ongoing experiences with running and scaling Bitbucket,
