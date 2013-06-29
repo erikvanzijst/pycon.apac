@@ -25,6 +25,6 @@ which is entirely written in Python.
 Having said that though, many of the tools and techniques demonstrates will
 apply just as well to other types of applications and situations.
 
-Erik van Zijst
+Erik van Zijst  
 PyCon AU Hobart, 2013
 
