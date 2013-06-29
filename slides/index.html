@@ -178,36 +178,37 @@ class WsgiMiddleware(object):
           the problematic code.
         </aside>
       </section>
+
+
+      <section>
+        <h2>Simple, just:</h2>
+
+        <div>
+          <br>
+        </div>
+
+        <ul>
+          <li>Rewrite each hotspot to run in constant time</li>
+          <li>Leads to predictable, bounded max runtime</li>
+          <li>Fixed upper bound is your new 100 percentile</li>
+        </ul>
+        <aside class="notes">
+          At this point all we need to do is refactor hotspots with code that
+          always runs in constant time.
+
+          When this approach is consistently taken, all code paths ultimately
+          end up with a predictable
+          execution time that has a fixed upper threshold. This deterministic
+          upper bound becomes the new
+          100 percentile.
+        </aside>
+      </section>
       
       
       <section>
-    <h2>Simple, just:</h2>
-<div>
-<br>
-</div>
-
-<ul>
-<li>Rewrite each hotspot to run in constant time</li>
-<li>Leads to predictable, bounded max runtime</li>
-<li>Fixed upper bound is your new 100 percentile</li>
-</ul>
-<aside class="notes">
-    At this point all we need to do is refactor hotspots with code that always runs in constant time.
-    
-    When this approach is consistently taken, all code paths ultimately end up with a predictable
-    execution time that has a fixed upper threshold. This deterministic upper bound becomes the new
-    100 percentile.
-</aside>
-</section>
-<section>
-<div>
-GET /api/1.0/repositories/m_eide/nav-maintenance-django/changesets
+        <div>
+          GET /api/1.0/repositories/m_eide/nav-maintenance-django/changesets
 <pre><code>RequestTimeoutError
-
-  File "piston/resource.py", line 174, in checked_meth
-    return meth(*args, **kwargs)
-  File "piston/utils.py", line 153, in wrap
-    return f(self, request, *args, **kwargs)
   File "bitbucket/apps/api/v10/handlers.py", line 3288, in read
     history = list(repo.history)
   File "orochi/hg.py", line 1188, in __len__
@@ -225,110 +226,117 @@ GET /api/1.0/repositories/m_eide/nav-maintenance-django/changesets
   File "interruptingcow/__init__.py", line 56, in handler
     raise exception</code></pre>
 
-<span style="color: rgb(220, 220, 220); font-family: monospace; text-align: left; white-space: pre-wrap;">list(repo.history) </span>&nbsp;does not scale well</div>
-<aside class="notes">
-    After we installed the signal handler, this is one of the timeouts that started appearing on our Sentry
-    dashboard.
-    
-    This is the interrupted stacktrace of a long-running request on our commit listing API. To avoid having to
-    read through the entire repository, the response is paginated. The pagination here is
-    offset-based and the response also includes a count of the total number of commits in the repository. This
-    is to help users determine when they have reached the last page.
-    
-    To determine the total number of commits, this code loads all commits into a Python list and then looks at
-    the length of that list. While it doesn't read any content, listing commits is not cheap and takes longer
-    the more commits there are, to the point that it times out.
-    
-    Unfortunately, for Git the only way to find the total number of commits is to just count them one by one
-    and so we have to drop this information.
-    
-    We have since written a newer version of this API, whose pagination is not offset-based, but uses links
-    embedded in the response.
-</aside>
-</section>
-<section>
-    <h2>Easier said than done</h2>
-<div>intermittent infrastructure issues</div>
-<div>severe lock contention</div>
-<div>unpredictable input (4GB blob)</div>
-<div>problematic libraries (regex?)</div>
-<div>
-    <br>
-</div>
+          <span style="color: rgb(220, 220, 220); font-family: monospace; text-align: left; white-space: pre-wrap;">list(repo.history) </span>&nbsp;does not scale well!
+        </div>
+        <aside class="notes">
+            After we installed the signal handler, this is one of the timeouts that started appearing on our Sentry
+            dashboard.
+            
+            This is the interrupted stacktrace of a long-running request on our commit listing API. To avoid having to
+            read through the entire repository, the response is paginated. The pagination here is
+            offset-based and the response also includes a count of the total number of commits in the repository. This
+            is to help users determine when they have reached the last page.
+            
+            To determine the total number of commits, this code loads all commits into a Python list and then looks at
+            the length of that list. While it doesn't read any content, listing commits is not cheap and takes longer
+            the more commits there are, to the point that it times out.
+            
+            Unfortunately, for Git the only way to find the total number of commits is to just count them one by one
+            and so we have to drop this information.
+            
+            We have since written a newer version of this API, whose pagination is not offset-based, but uses links
+            embedded in the response.
+        </aside>
+      </section>
 
-<aside class="notes">
-    Great! Except of course, not everything is that straightforward.
-    
-    Sometimes, removing a problematic area in your code requires refactoring of large chunks of
-    other code and cost a great deal of time, especially when it affect interfaces between independent parts
-    of your application.
-    
-    It becomes worse still when the problem is in a library you depend on. If your fixes require
-    incompatible changes to its public interface it might be very difficult for your contribution
-    to get accepted, more so when your use case is not considered a common one.
-    
-    Nowadays most libraries are open source, but what if you're not able to modify them? Or they're
-    written in an obscure language? All these things can make it prohibitively expensive to
-    properly address an issue.
-    
-    Constant runtime might also simply not be in the cards for some libraries. Regular expressions
-    for instance can exhibit widely varying runtime performance.
-    
-    Another, completely different class of problems we've seen is due to lock contention. Transactional
-    database updates can hold up other queries and updates and as your site becomes busier, the effects
-    of contention become more severe. A request that may have been instant at one point, may be substantially
-    slower or even time out at another time.
-    
-    We also see a spike in timeouts right after we deploy. One contributing factor here is that since
-    our caches are not versioned, we have to flush our memcached servers after every deploy. This leads
-    to a short but sharp load spike, affecting nearly everything on the site. Automated infrastructure
-    housekeeping jobs like expensive backups, maintenance or hardware failures can have similar effects
-    on performance.
-    
-    Though, possibly the biggest issue for us is processing unpredictable input. Bitbucket tries to
-    be smart about detecting mentions of other users, commit hashes, issue keys and pull requests in
-    commit messages, issue descriptions, pull request comments and virtually any piece of user
-    provided content.
-    
-    This matching is done through regular expressions, which is a pretty big performance risk. We
-    even allow users to provide their own custom regular expressions so they can create their own
-    integrations with external products and services, further increasing the risk of abuse or
-    accidental misuse.
-    
-    This somewhat contrived example for instance will run longer than this talk.
-    
-    So while the strategy of making everything run in constant time sounds great, it's incredibly
-    hard to do so, requiring a disproportional investment in what accounts for only a tiny fraction
-    of your site's traffic.
-    
-    So instead we need to look for a pragmatic approach that can give us some control over
-    unexpected execution times when it's impossible to changing existing code or functionality.
-    
-    Having been confronted with many of these issues, it became clear that in many cases it would have
-    been ok to interrupt a long running request, skip over the problematic portion and render
-    a partial result, instead of blowing up, or removing functionality that works fine 99% of the
-    time.
-    
-</aside>
-</section>
+      
+      <section>
+        <h2>Easier said than done</h2>
+        <div><br></div>
+
+        <ul>
+          <li class="fragment">Dependencies hard to fix</li>
+          <li class="fragment">Severe lock contention</li>
+          <li class="fragment">Environmental issues (flushed caches, maintenance)</li>
+          <li class="fragment">Unpredictable input<br>
+            <pre><code>re.match(r'^(a+)+$',
+         'aaaaaaaaaaaaaaaaaaaaaaaaaaaab')</code></pre>
+          </li>
+        </ul>
+
+        <aside class="notes">
+            Great! Except of course, not everything is that straightforward.
+            
+            Sometimes, removing a problematic area in your code requires refactoring of large chunks of
+            other code and cost a great deal of time, especially when it affect interfaces between independent parts
+            of your application.
+            
+            It becomes worse still when the problem is in a library you depend on. If your fixes require
+            incompatible changes to its public interface it might be very difficult for your contribution
+            to get accepted, more so when your use case is not considered a common one.
+            
+            Nowadays most libraries are open source, but what if you're not able to modify them? Or they're
+            written in an obscure language? All these things can make it prohibitively expensive to
+            properly address an issue.
+            
+            Constant runtime might also simply not be in the cards for some libraries. Regular expressions
+            for instance can exhibit widely varying runtime performance.
+            
+            Another, completely different class of problems we've seen is due to lock contention. Transactional
+            database updates can hold up other queries and updates and as your site becomes busier, the effects
+            of contention become more severe. A request that may have been instant at one point, may be substantially
+            slower or even time out at another time.
+            
+            We also see a spike in timeouts right after we deploy. One contributing factor here is that since
+            our caches are not versioned, we have to flush our memcached servers after every deploy. This leads
+            to a short but sharp load spike, affecting nearly everything on the site. Automated infrastructure
+            housekeeping jobs like expensive backups, maintenance or hardware failures can have similar effects
+            on performance.
+            
+            Though, possibly the biggest issue for us is processing unpredictable input. Bitbucket tries to
+            be smart about detecting mentions of other users, commit hashes, issue keys and pull requests in
+            commit messages, issue descriptions, pull request comments and virtually any piece of user
+            provided content.
+            
+            This matching is done through regular expressions, which is a pretty big performance risk. We
+            even allow users to provide their own custom regular expressions so they can create their own
+            integrations with external products and services, further increasing the risk of abuse or
+            accidental misuse.
+            
+            This somewhat contrived example for instance will run longer than this talk.
+            
+            So while the strategy of making everything run in constant time sounds great, it's incredibly
+            hard to do so, requiring a disproportional investment in what accounts for only a tiny fraction
+            of your site's traffic.
+            
+            So instead we need to look for a pragmatic approach that can give us some control over
+            unexpected execution times when it's impossible to changing existing code or functionality.
+            
+            Having been confronted with many of these issues, it became clear that in many cases it would have
+            been ok to interrupt a long running request, skip over the problematic portion and render
+            a partial result, instead of blowing up, or removing functionality that works fine 99% of the
+            time.
+            
+        </aside>
+      </section>
 
     
-<section>
-<h2>Interruptingcow</h2>
+      <section>
+        <h2>Interruptingcow</h2>
 
-<pre><code>$ python
+        <pre class="fragment"><code>$ python
 &gt; from interruptingcow import timeout
 &gt; with timeout(2, RuntimeError):
 &gt;     while True:
 &gt;         pass
 Traceback (most recent call last):
-  File "<stdin>", line 4, in <module>
+  File "&lt;stdin>", line 4, in &lt;module>
   File ".../interruptingcow/__init__.py", line 56, in handler
     raise exception
 RuntimeError
 </code></pre>
-
-<pre><code>from interruptingcow import timeout
+        <div class="fragment">
+          <pre><code>from interruptingcow import timeout
 
 class RequestTimeout(Exception): pass
 
@@ -340,33 +348,34 @@ class TimeboxedMiddleware(object):
     def __call__(self, environ, start_response):
         self.app(environ, start_response)
 </code></pre>
-<ul>
-    <li>Interrupt any code path by raising custom exceptions</li>
-</ul>
-
-<aside class="notes">
-    We decided to follow up on this and changed our alarm signal handler into
-    a generic library that can be used to timebox arbitrary chunks of code at any
-    level of the stack. We called it Interruptingcow and here's what it looks like.
-    
-    Here I break out of a busy loop after 2 seconds, raising a RuntimeError.
-    
-    It's also a decorator, which simplifies our timeout middleware.
-    
-    Because it's reentrant and supports arbitrary nesting of independant timeouts,
-    we freely use it in any part of our code, using unique exceptions and catching
-    them in those cases where we are able to perform a cheaper, alternative
-    action.
-</aside>
-
-</section>
-<section>
-<h2>scalable content linkification</h2>
-<div>
-    <br>
-</div>
-<pre><code>
-def replace(doc, pattern, tmpl):
+          <ul>
+              <li>Interrupt any code path by raising custom exceptions</li>
+          </ul>
+        </div>
+        <aside class="notes">
+            We decided to follow up on this and changed our alarm signal handler into
+            a generic library that can be used to timebox arbitrary chunks of code at any
+            level of the stack. We called it Interruptingcow and here's what it looks like.
+            
+            Here I break out of a busy loop after 2 seconds, raising a RuntimeError.
+            
+            It's also a decorator, which simplifies our timeout middleware.
+            
+            Because it's reentrant and supports arbitrary nesting of independant timeouts,
+            we freely use it in any part of our code, using unique exceptions and catching
+            them in those cases where we are able to perform a cheaper, alternative
+            action.
+        </aside>
+        
+      </section>
+      
+      
+      <section>
+        <h2>scalable content linkification</h2>
+        <div>
+            <br>
+        </div>
+        <pre><code>def replace(doc, pattern, tmpl):
     try:
         m = pattern.search(doc)
         if m is not None:
@@ -379,62 +388,86 @@ def replace(doc, pattern, tmpl):
 
 with timeout(.1, TimeoutException):
     print replace(doc, re.compile(r'[\da-f]{7,40}'),
-                  '<a href="commits/{0}">{0}</a>')
+                  '&lt;a href="commits/{0}">{0}&lt;/a>')
 </code></pre>
-<ul>
-    <li>Iteratively linkifies commit hashes until time runs out</li>
-<li>Safely runs user-provided patterns</li>
-</ul>
+        <ul>
+            <li>Iteratively linkifies commit hashes until time runs out</li>
+        <li>Safely runs user-provided patterns</li>
+        </ul>
+        
+        <aside class="notes">
+            Now remember I said that we apply regular expressions to commit messages,
+            issue comments, etc to automatically turn usernames, commit hashes and
+            other known patterns into hyperlinks. And that we even allow users to
+            provide custom regexs to create links to anything they like.
+            
+            To achieve this, we applied timeouts in such a way that matches are
+            substituted one by one, util we run out of time. If the input document is
+            very big, or the regexs expensive, some unlinked items may remain.
+            
+            The code here is a simplified version of how we implemented this.
+        </aside>
+      </section>
 
-<aside class="notes">
-    Now remember I said that we apply regular expressions to commit messages,
-    issue comments, etc to automatically turn usernames, commit hashes and
-    other known patterns into hyperlinks. And that we even allow users to
-    provide custom regexs to create links to anything they like.
-    
-    To achieve this, we applied timeouts in such a way that matches are
-    substituted one by one, util we run out of time. If the input document is
-    very big, or the regexs expensive, some unlinked items may remain.
-    
-    The code here is a simplified version of how we implemented this.
-</aside>
-</section>
-    
-<section>
-<h2>django-timelimit</h2>
-<pre>{% load timelimit %}
-<table class="commit-list">
-  <tr>
-    <th class="author">{% trans "Author" %}</th>
-    <th class="message">{% trans "Message" %}</th>
-  </tr>
+      
+      <section>
+        <h2>django-timelimit</h2>
+        <pre><code style="max-height: 500px">{% load timelimit %}
+&lt;table class="commit-list">
+  &lt;tr>
+    &lt;th class="author">Author&lt;/th>
+    &lt;th class="message">Message&lt;/th>
+  &lt;/tr>
   {% for commit in commit_list %}
-    <tr>
-      <td class="author">{{ commit.author }}</td>
-      <td class="description">{{ commit.desc }}</td>
-      {% timelimit quota %}
-        <td class="diffstat">{% diffstat commit %}</td>
+    &lt;tr>
+      &lt;td class="author">{{ commit.author }}&lt;/td>
+      &lt;td class="description">{{ commit.desc }}&lt;/td>
+      {% timelimit diffstat_quota %}
+        &lt;td class="diffstat">{% diffstat commit %}&lt;/td>
       {% else %}
-        <td class="note">diffstat not available</td>
+        &lt;td class="note">diffstat not available&lt;/td>
       {% endtimelimit %}
-    </tr>
+    &lt;/tr>
   {% endfor %}
-</table>
-</pre>
-<aside class="notes">
-    As much of Bitbucket runs in Django we've also written a custom template
-    tag for using interrupts straight in Django templates.
-</aside>
-</section>
-<section>
-    <h2>Nesting</h2>
+&lt;/table>
+</code></pre>
+        <ul>
+          <li class="fragment">Share time intervals among multiple timeouts<br>
+            <pre><code>diffstat_quota = interruptingcow.Quota(1.0)</code></pre>
+          </li>
+        </ul>
+        <aside class="notes">
+          As much of Bitbucket runs on Django we've also written a custom template
+          tag for using interrupts straight in Django templates.
+          
+          The timelimit tag timeboxes its body and will render its else-clause
+          if it fails to do so in time.
+          
+          Here it is used inside a loop, listing properties for a bunch of
+          commits. For each commit the number of lines that it changes is
+          computed and displayed. However, the time it takes to compute a commit's
+          diffstat is related to its size and therefor very unpredictable and
+          we only want to spend a limited amount of time. 
+          
+          -FRAGMENT-
+          
+          We timebox inside a loop here, allocating our time interval as a
+          Quote object that can then be reused in each iteration of the loop.
+          Each invocation can only use whatever is left in the quota. If all
+          time is used up, consecutive timelimit tags will render their else
+          clause.
+        </aside>
+      </section>
 
-<aside class="notes">
-    It is reentrant and supports arbitrary nesting of independant timeouts.
-    This allows us to 
-</aside>
-</section>
-</div>
+      <section>
+        <h2>Nesting</h2>
+
+        <aside class="notes">
+            It is reentrant and supports arbitrary nesting of independant timeouts.
+            This allows us to 
+        </aside>
+      </section>
+    </div>
 
         
         
