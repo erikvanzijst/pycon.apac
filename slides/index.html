@@ -56,7 +56,10 @@
             src="tweet.png" style="font-size: 75.96px; width: 574px;">
         </h2>
         <aside class="notes">
-          
+          Recently this tweet showed up on my timeline, which took me by
+          surprise. This being a tweet, there was no context or detail
+          whatsoever and while I bet he wasn't lying, it left me guessing what
+          this Stephen had been looking at.
         </aside>
       </section>
 
@@ -74,12 +77,15 @@
         <aside class="notes">
           A quick comparison of the 2 sites' average response time provides no
           basis for the big discrepancy.
-          Quick inspection reveals that the client relies on a small number of
-          APIs, of which one performs exceptionally poorly.
+          
+          I had a closer look and learned that Stephen works for a company that
+          provides a product that integrates with both Bitbucket and GitHub. It
+          also showed that their integration relies on a small number of APIs,
+          of which one performs exceptionally poorly.
 
           Due to the APIs low traffic, its poor performance has almost no affect
-          on the average, which goes to show that averages are a misleading metric, as our
-          busiest APIs have been also been tuned the most.
+          on the average, which goes to show that averages are a misleading
+          metric. Our busiest APIs have been also been tuned the most.
         </aside>
       </section>
 
@@ -108,29 +114,27 @@
         </div>
 
         <aside class="notes">
-          However, while problematic requests are only a tiny fraction of your
-          total traffic, they have
-          the biggest impact on usability. Requests that are significantly
-          faster than the average don't pose any
-          problems, but those significantly slower than the average are the ones
-          that break pages and API clients.
+          However, while problematic requests like these are only a tiny
+          fraction of our total traffic, in some ways they have the biggest
+          impact on our service.
+          
+          Requests that are significantly faster than the average don't pose
+          any problems, but those significantly slower than the average are the
+          ones that break pages, API clients and frustrate users.
 
           Worse, some requests can literally run forever when stuck in an
-          infinite loop or deadlock. With every
-          hit, they tie up one of your worker threads or processes until none
-          are left to service other
+          infinite loop or deadlock. With every hit, they tie up one of your
+          worker threads or processes until none are left to service other
           requests, essentially taking out your site.
 
           To prevent this doom scenario, many webservers, ours included, have a
-          builtin watchdog that kills
-          long running requests. Gunicorn defaults to 30 seconds after which it
-          SIGKILLs the worker process.
+          builtin watchdog that kills long running requests. Gunicorn defaults
+          to 30 seconds after which it SIGKILLs the worker process.
 
           As a consequence, no meaningful statistics can be collected for these
-          requests, making them all but
-          invisible. Since the longest running requests most clearly demonstrate
-          where you need to direct your
-          attention, we needed a way to make them visible.
+          requests, making them pretty much invisible. But since it are these
+          long running requests that most clearly demonstrate where you need to
+          direct your attention, we needed a way to make them visible.
         </aside>
       </section>
 
