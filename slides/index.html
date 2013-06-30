@@ -18,7 +18,7 @@
 		<link rel="stylesheet" href="css/theme/default.css" id="theme">
 
 		<!-- For syntax highlighting -->
-		<link rel="stylesheet" href="lib/css/zenburn.css">
+		<link rel="stylesheet" href="lib/css/github.css">
 
 		<!-- If the query includes 'print-pdf', use the PDF print sheet -->
 		<script>
@@ -47,6 +47,12 @@
             <a href="https://bitbucket.org/evzijst">bitbucket.org/evzijst</a>
           </p>
         </div>
+        
+        <aside class="notes">
+          G'day everybody, I'm Erik, I work at Atlassian where I'm a dev on
+          Bitbucket and I want to talk a bit about the importance of responsive
+          code and share some techniques that can help with that.
+        </aside>
       </section>
 
 
@@ -57,7 +63,7 @@
         </h2>
         <aside class="notes">
           Recently this tweet showed up on my timeline, which took me by
-          surprise. This being a tweet, there was no context or detail
+          surprise. This being a tweet, there was of course no context or detail
           whatsoever and while I bet he wasn't lying, it left me guessing what
           this Stephen had been looking at.
         </aside>
@@ -86,6 +92,10 @@
           Due to the APIs low traffic, its poor performance has almost no affect
           on the average, which goes to show that averages are a misleading
           metric. Our busiest APIs have been also been tuned the most.
+          
+          So what he was seeing was real, but wasn't representative for the service
+          as a whole. He was just unlucky that he had to use such a crappy
+          API endpoint.
         </aside>
       </section>
 
@@ -97,16 +107,16 @@
         <div>
 
           <ul>
-            <li>Frustrate users, timeouts</li>
-            <li>Break API clients</li>
-            <li>Rants on Twitter</li>
+            <li class="fragment">Frustrate users, timeouts</li>
+            <li class="fragment">Break API clients</li>
+            <li class="fragment">Rants on Twitter</li>
           </ul>
           <div style="text-align: left;">
             <br>
           </div>
-          <div style="text-align: left;">
+          <div class="fragment" style="text-align: left;">
             Fast requests do not, so forget averages, use 98 percentiles
-            and focus on the 2% instead.
+            and focus on the remaining 2% instead.
           </div>
           <p>
           </p>
@@ -116,11 +126,12 @@
         <aside class="notes">
           However, while problematic requests like these are only a tiny
           fraction of our total traffic, in some ways they have the biggest
-          impact on our service.
+          impact on our users.
           
-          Requests that are significantly faster than the average don't pose
-          any problems, but those significantly slower than the average are the
-          ones that break pages, API clients and frustrate users.
+          Requests that are significantly faster than the average don't hurt
+          anyone, but those significantly slower than the average are the
+          ones that break pages, API clients and evidently frustrate users to
+          the point that publicly rant about it.
 
           Worse, some requests can literally run forever when stuck in an
           infinite loop or deadlock. With every hit, they tie up one of your
@@ -129,18 +140,24 @@
 
           To prevent this doom scenario, many webservers, ours included, have a
           builtin watchdog that kills long running requests. Gunicorn defaults
-          to 30 seconds after which it SIGKILLs the worker process.
+          to 30 seconds after which it hard-kills the worker process. It sends
+          a KILL signal equivalent to a "kill -9". Programs cannot intercept this
+          signal and so it always works.
 
           As a consequence, no meaningful statistics can be collected for these
-          requests, making them pretty much invisible. But since it are these
-          long running requests that most clearly demonstrate where you need to
+          requests, making them pretty much invisible. We can't tell how long
+          they really would have run if they hadn't been killed, nor can we tell
+          what they were stuck on.
+          
+          However, it are these
+          requests that most clearly demonstrate where you need to
           direct your attention, we needed a way to make them visible.
         </aside>
       </section>
 
 
       <section>
-        <h2>Log timeouts</h2>
+        <h2>Logging timeouts</h2>
 
 <pre><code data-trim>import signal
 
@@ -153,64 +170,45 @@ class WsgiMiddleware(object):
     def __init__(self, app):
         self.app = app
 
-  def __call__(self, environ, start_response):
-      signal.setitimer(signal.ITIMER_REAL, 28)
-      try:
-          return self.app(environ, start_response)
-      finally:
-          signal.setitimer(signal.ITIMER_REAL, 0)
+    def __call__(self, environ, start_response):
+        signal.setitimer(signal.ITIMER_REAL, 28)
+        try:
+            return self.app(environ, start_response)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
 </code></pre>
 
-        <p class="fragment">Full tracebacks of hotspots in Sentry.</p>
+        <p class="fragment">Full tracebacks of hotspots in Sentry</p>
 
         <aside class="notes">
-          What we did was we scheduled an alarm signal for every request,
-          telling the operating system's kernel to interrupt our process in 28
-          seconds, no matter what it was doing and invoke our handler method.
+          What we did was we scheduled an alarm signal at the start of every request
+          and cancel the timer when the request is done.
+          This alarm signal tells the operating system's kernel to interrupt our process 28
+          seconds after the start of the request, no matter what it was doing and invoke our handler method,
+          where we regain control over it.
 
-          Whether it was waiting for IO, or stuck in a deadlock, 28 seconds
+          Whether it the process was blocked on IO, stuck in a deadlock, or busy
+          performing a crazy number of database queries, 28 seconds
           after the start of the request, just before the webserver would
-          otherwise kill the request, our handler would get invoked and raise
+          otherwise kill us, our handler would get invoked and raise
           a normal Python-level exception.
 
-          This unanticipated and uncaught exception then causes the request to
-          fail normally, logging the event through the normal channels. In our
-          case that includes Sentry.
+          This unanticipated and uncaught exception deliberately breaks the
+          request. It would have crashed anyway when the webserver killed it
+          2 seconds later, but now it fails gracefully, with all the details,
+          including the exception's stacktrace, getting logged through the
+          normal channels. In our case that includes Sentry.
           
           -FRAGMENT-
 
-          Not only can we now identify the biggest performance bottlenecks, but
-          the stacktraces including all stack variables, point us straight to
-          the problematic code.
+          With the biggest performance bottlenecks now getting logged properly,
+          the true scale of the problem becomes clear.
+          And the stacktraces that get logged as part of that include all stack
+          variables, pointing us straight to the problematic code.
         </aside>
       </section>
 
 
-      <section>
-        <h2>Simple, just:</h2>
-
-        <div>
-          <br>
-        </div>
-
-        <ul>
-          <li>Rewrite each hotspot to run in constant time</li>
-          <li>Leads to predictable, bounded max runtime</li>
-          <li>Fixed upper bound is your new 100 percentile</li>
-        </ul>
-        <aside class="notes">
-          At this point all we need to do is refactor hotspots with code that
-          always runs in constant time.
-
-          When this approach is consistently taken, all code paths ultimately
-          end up with a predictable
-          execution time that has a fixed upper threshold. This deterministic
-          upper bound becomes the new
-          100 percentile.
-        </aside>
-      </section>
-      
-      
       <section>
         <div>
           GET /api/1.0/repositories/m_eide/nav-maintenance-django/changesets
@@ -235,27 +233,61 @@ class WsgiMiddleware(object):
           <span style="color: rgb(220, 220, 220); font-family: monospace; text-align: left; white-space: pre-wrap;">list(repo.history) </span>&nbsp;does not scale well!
         </div>
         <aside class="notes">
-            After we installed the signal handler, this is one of the timeouts that started appearing on our Sentry
-            dashboard.
+          After we installed the signal handler, this is one of the timeouts that started appearing on our Sentry
+          dashboard.
             
-            This is the interrupted stacktrace of a long-running request on our commit listing API. To avoid having to
-            read through the entire repository, the response is paginated. The pagination here is
-            offset-based and the response also includes a count of the total number of commits in the repository. This
-            is to help users determine when they have reached the last page.
-            
-            To determine the total number of commits, this code loads all commits into a Python list and then looks at
-            the length of that list. While it doesn't read any content, listing commits is not cheap and takes longer
-            the more commits there are, to the point that it times out.
-            
-            Unfortunately, for Git the only way to find the total number of commits is to just count them one by one
-            and so we have to drop this information.
-            
-            We have since written a newer version of this API, whose pagination is not offset-based, but uses links
-            embedded in the response.
+          This is part of the stacktrace of a long-running interrupted request on our commit listing API.
+          This returns a paginated list of all the commits in a repository.
+          
+          The pagination is offset based. The client has to explicitly provide
+          a starting point and a page size for every request. Now to help the
+          client determine when they have reached the last page, each response
+          also includes a count of the total number of commits in the
+          repository.
+
+          To determine the total number of commits, this code naively loads all
+          commits into a Python list in memory and then looks at
+          the length of that list. While it doesn't include any diffs or content, listing commits is not cheap and takes longer
+          the more commits there are, to the point that it times out.
+
+          If we insist on including the total commit count, we *have* to find a
+          cheaper way to get to it. In Mercurial that is actually pretty easy
+          as all commits are sequentially numbered.
+          Unfortunately, for Git the only way to find the total number of
+          commits is to just count them one by one and since that can take a
+          very long time, we have no choice but to drop this information.
+
+          We have since written a newer version of this API, whose pagination 
+          does not rely on offsets and counts. Instead each response contains a
+          link to the next page. The final page simply does not have this link.
         </aside>
       </section>
 
-      
+
+      <section>
+        <h2>Solution? Simple. just:</h2>
+
+        <div>
+          <br>
+        </div>
+
+        <ul>
+          <li>Rewrite each hotspot to run in constant time</li>
+          <li>Leads to predictable, bounded max runtime</li>
+          <li>Fixed upper bound is your new 100 percentile</li>
+        </ul>
+        <aside class="notes">
+          At this point all we need to do is refactor every single timeout that shows
+          up such that it always runs in constant time.
+
+          If this approach is consistently taken, all code paths should ultimately
+          end up with a predictable execution time that has a fixed upper
+          bound. This deterministic upper bound becomes the new 100 percentile
+          and there will never be any performance issues again.
+        </aside>
+      </section>
+
+
       <section>
         <h2>Easier said than done</h2>
         <div><br></div>
@@ -286,7 +318,7 @@ class WsgiMiddleware(object):
             properly address an issue.
             
             Constant runtime might also simply not be in the cards for some libraries. Regular expressions
-            for instance can exhibit widely varying runtime performance.
+            for instance can exhibit widely varying runtime performance, which is hard to predict.
             
             Another, completely different class of problems we've seen is due to lock contention. Transactional
             database updates can hold up other queries and updates and as your site becomes busier, the effects
@@ -302,7 +334,7 @@ class WsgiMiddleware(object):
             Though, possibly the biggest issue for us is processing unpredictable input. Bitbucket tries to
             be smart about detecting mentions of other users, commit hashes, issue keys and pull requests in
             commit messages, issue descriptions, pull request comments and virtually any piece of user
-            provided content.
+            provided content and turn them into hyperlink.
             
             This matching is done through regular expressions, which is a pretty big performance risk. We
             even allow users to provide their own custom regular expressions so they can create their own
@@ -458,16 +490,22 @@ with timeout(.1, TimeoutException):
           -FRAGMENT-
           
           We timebox inside a loop here, allocating our time interval as a
-          Quote object that can then be reused in each iteration of the loop.
+          Quota object that can then be reused in each iteration of the loop.
           Each invocation can only use whatever is left in the quota. If all
-          time is used up, consecutive timelimit tags will render their else
+          time is used up, consecutive timelimit tags will immediately render their else
           clause.
         </aside>
       </section>
 
       <section>
-        <h2>Final thoughts</h2>
+        <h2>Opportunities</h2>
 
+        <ul>
+          <li class="fragment">Works with legacy code</li>
+          <li class="fragment">Generic solution to different problems</li>
+          <li class="fragment">Optimistic approach (EAFP vs LBYL)</li>
+          <li class="fragment">Adapts to server load</li>
+        </ul>
         <aside class="notes">
           I'm not advocating you should wrap everything in timeouts. Not
           every problem lends itself to it. Sometimes there is simply no useful
@@ -477,35 +515,74 @@ with timeout(.1, TimeoutException):
           responsive web apps is to not have any code with dynamic,
           unpredictable execution time.
           
-          This is a very hard problem and probably something that many of you,
-          myself included, will continue to face throughout your careers. There
-          is no one-size-fits-all solution and you should continue to do what
-          you have done in the past.
+          This is a very hard problem and probably something that many of us,
+          myself included, will continue to face throughout our careers. There
+          is no one-size-fits-all solution and we should continue to be smart
+          about it.
           
-          Refactor your code when possible. Don't make redundant database
-          queries.
+          We should still refactor bad code when possible. Don't make redundant
+          database queries.
           
           Always apply pagination.
           
-          When performing network IO, use sensible socket timeouts and
+          When performing IO, use sensible read and write timeouts. When you
+          have to use any kind of locking, whether they be file locks,
+          threading mutexes, or implicit table or rows locks during a database
+          transaction, release them as soon as you're done.
           
-          even drop functionality you cannot predict the execution time for.
+          Even drop functionality for which the execution time is related to
+          external factors you don't control.
           
           However, interrupt-driven time-boxing can add to this bag of tricks,
           as it offers some unique properties:
           
+          -FRAGMENT-
           It works with existing code and libraries. Stuff for which
-          refactoring is prohibitively expensive.
+          refactoring is prohibitively expensive. Git's diffstat calculation is
+          an example of this.
           
+          -FRAGMENT-
           Offers a generic approach to different kinds of bottlenecks, whether
           they're IO- or CPU-bound.
-          It allows for an optimistic approach where unpredictable code does
-          not have to be banished altogether, but can continue to be used safely.
           
+          -FRAGMENT-
+          It allows for an optimistic approach where unpredictable code does
+          not have to be banished altogether, but can continue to be used safely,
+          gracefully degrading when necessary. This allows us to offer custom
+          linkification.
+          
+          -FRAGMENT-
           Finally, time-based programming has the interesting characteristic
           that it reacts well under high load. When high server load causes
           programs to run more slowly, time-boxing helps prevent a buildup
           of pending jobs and requests and response times do not suffer.
+        </aside>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom: 100px;">Summary</h2>
+        <ul>
+          <li class="fragment">Page render times highly dependent on runtime factors</li>
+          <li class="fragment">Page timeouts have a disproportionally large impact</li>
+          <li class="fragment">Refactor, pre-compute, paginate, remove functionality, etc</li>
+          <li class="fragment">Time-box expensive code with cheap fallback</li>
+        </ul>
+        <p class="fragment" style="margin-top: 100px;"><em>If it ain't fast, you ain't done</em></p>
+        
+        <aside class="notes">
+          That's all I have. And so to summarize;
+          
+          Page render times often fluctuate as they are almost always dependent
+          on runtime factors. Most request will be ok, some will be very fast
+          and some will be so slow that things break.
+          
+          The average and fast pages don't bother anyone, but it's those few
+          slow pages that give you a bad name.
+          
+          Always be mindful of performance. When designing new code, make sure
+          that it will scale properly.
+          
+          When everything else fails, time-box your code.
         </aside>
       </section>
       
