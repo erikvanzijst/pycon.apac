@@ -85,7 +85,7 @@
           basis for the big discrepancy.
           
           I had a closer look and learned that Stephen works for a company that
-          provides a product that integrates with both Bitbucket and GitHub. It
+          builds a product that integrates with both Bitbucket and GitHub. It
           also showed that their integration relies on a small number of APIs,
           of which one performs exceptionally poorly.
 
@@ -150,7 +150,7 @@
           what they were stuck on.
           
           However, it are these
-          requests that most clearly demonstrate where you need to
+          requests that frustrate users the most and it are these requests that most clearly demonstrate where you need to
           direct your attention, we needed a way to make them visible.
         </aside>
       </section>
@@ -392,14 +392,14 @@ class TimeboxedMiddleware(object):
         </div>
         <aside class="notes">
             We decided to follow up on this and changed our alarm signal handler into
-            a generic library that can be used to timebox arbitrary chunks of code at any
+            a generic library that can be used to time-box arbitrary chunks of code at any
             level of the stack. We called it Interruptingcow and here's what it looks like.
             
             Here I break out of a busy loop after 2 seconds, raising a RuntimeError.
             
             It's also a decorator, which simplifies our timeout middleware.
             
-            Because it's reentrant and supports arbitrary nesting of independant timeouts,
+            Because it's reentrant and supports arbitrary nesting of independent timeouts,
             we freely use it in any part of our code, using unique exceptions and catching
             them in those cases where we are able to perform a cheaper, alternative
             action.
