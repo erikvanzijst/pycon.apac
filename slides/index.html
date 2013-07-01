@@ -90,8 +90,11 @@
           of which one performs exceptionally poorly.
 
           Due to the APIs low traffic, its poor performance has almost no affect
-          on the average, which goes to show that averages are a misleading
-          metric. Our busiest APIs have been also been tuned the most.
+          on the average. Our busiest pages and APIs have been also been tuned
+          the most, which goes to show that averages are a misleading
+          metric. It's a number that gives us a false sense of accomplishment but
+          which says nothing at all about the usability of the service. Just ask
+          Stephen.
           
           So what he was seeing was real, but wasn't representative for the service
           as a whole. He was just unlucky that he had to use such a crappy
@@ -183,7 +186,7 @@ class WsgiMiddleware(object):
         <aside class="notes">
           What we did was we scheduled an alarm signal at the start of every request
           and cancel the timer when the request is done.
-          This alarm signal tells the operating system's kernel to interrupt our process 28
+          This alarm signal tells the operating system's kernel, this goes beyond Python, to interrupt our process 28
           seconds after the start of the request, no matter what it was doing and invoke our handler method,
           where we regain control over it.
 
@@ -303,58 +306,63 @@ class WsgiMiddleware(object):
         </ul>
 
         <aside class="notes">
-            Great! Except of course, not everything is that straightforward.
-            
-            Sometimes, removing a problematic area in your code requires refactoring of large chunks of
-            other code and cost a great deal of time, especially when it affect interfaces between independent parts
-            of your application.
-            
-            It becomes worse still when the problem is in a library you depend on. If your fixes require
-            incompatible changes to its public interface it might be very difficult for your contribution
-            to get accepted, more so when your use case is not considered a common one.
-            
-            Nowadays most libraries are open source, but what if you're not able to modify them? Or they're
-            written in an obscure language? All these things can make it prohibitively expensive to
-            properly address an issue.
-            
-            Constant runtime might also simply not be in the cards for some libraries. Regular expressions
-            for instance can exhibit widely varying runtime performance, which is hard to predict.
-            
-            Another, completely different class of problems we've seen is due to lock contention. Transactional
-            database updates can hold up other queries and updates and as your site becomes busier, the effects
-            of contention become more severe. A request that may have been instant at one point, may be substantially
-            slower or even time out at another time.
-            
-            We also see a spike in timeouts right after we deploy. One contributing factor here is that since
-            our caches are not versioned, we have to flush our memcached servers after every deploy. This leads
-            to a short but sharp load spike, affecting nearly everything on the site. Automated infrastructure
-            housekeeping jobs like expensive backups, maintenance or hardware failures can have similar effects
-            on performance.
-            
-            Though, possibly the biggest issue for us is processing unpredictable input. Bitbucket tries to
-            be smart about detecting mentions of other users, commit hashes, issue keys and pull requests in
-            commit messages, issue descriptions, pull request comments and virtually any piece of user
-            provided content and turn them into hyperlink.
-            
-            This matching is done through regular expressions, which is a pretty big performance risk. We
-            even allow users to provide their own custom regular expressions so they can create their own
-            integrations with external products and services, further increasing the risk of abuse or
-            accidental misuse.
-            
-            This somewhat contrived example for instance will run longer than this talk.
-            
-            So while the strategy of making everything run in constant time sounds great, it's incredibly
-            hard to do so, requiring a disproportional investment in what accounts for only a tiny fraction
-            of your site's traffic.
-            
-            So instead we need to look for a pragmatic approach that can give us some control over
-            unexpected execution times when it's impossible to changing existing code or functionality.
-            
-            Having been confronted with many of these issues, it became clear that in many cases it would have
-            been ok to interrupt a long running request, skip over the problematic portion and render
-            a partial result, instead of blowing up, or removing functionality that works fine 99% of the
-            time.
-            
+          Great! Except of course, not everything is that straightforward.
+          
+          Sometimes, removing a problematic area in your code requires refactoring of large chunks of
+          other code and cost a great deal of time, especially when it affect interfaces between independent parts
+          of your application.
+          
+          -FRAGMENT-
+          It becomes worse still when the problem is in a library you depend on. If your fixes require
+          incompatible changes to its public interface it might be very difficult for your contribution
+          to get accepted, more so when your use case is not considered a common one.
+          
+          Nowadays most libraries are open source at least, but what if you're not able to modify them? Or they're
+          written in an obscure language? All these things can make it prohibitively expensive to
+          properly address an issue.
+          
+          Constant runtime might also simply not be in the cards for some libraries. Regular expressions
+          for instance can exhibit widely varying runtime performance, which is hard to predict.
+          
+          <!---FRAGMENT--->
+          <!--Another, completely different class of problems we've seen is due to lock contention-->
+          <!--at various levels. Transactional-->
+          <!--database updates can hold up other queries and updates and as your site becomes busier, the effects-->
+          <!--of contention become more severe. A request that may have been instant at one point, may be substantially-->
+          <!--slower or even time out at another time.-->
+          
+          -FRAGMENT-
+          We also see a spike in timeouts right after we deploy. One contributing factor here is that since
+          our caches are not versioned, we have to flush our memcached servers after every deploy. This leads
+          to a short but sharp load spike, affecting nearly everything on the site. Automated infrastructure
+          housekeeping jobs like expensive backups, maintenance or hardware failures can have similar effects
+          on performance.
+          
+          Though, possibly the biggest issue for us is processing unpredictable input. Bitbucket tries to
+          be smart about detecting mentions of other users, commit hashes, issue keys and pull requests in
+          commit messages, issue descriptions, pull request comments and virtually any piece of user
+          provided content and turn them into hyperlink.
+          
+          This matching is done through regular expressions, which is a pretty big performance risk. We
+          even allow users to provide their own custom regular expressions so they can create their own
+          integrations with external products and services, further increasing the risk of abuse or
+          accidental misuse.
+          
+          -FRAGMENT-
+          This seemingly innocuous example for instance will run longer than this talk.
+          
+          So while the strategy of making everything run in constant time
+          sounds great, it's incredibly hard to do so and still manage to build
+          an interesting application, requiring a disproportional investment in
+          what accounts for only a tiny fraction of your site's traffic.
+          
+          So instead we need to look for a pragmatic approach that can give us some control over
+          unexpected execution times when it's impossible to changing existing code or functionality.
+          
+          Having been confronted with many of these issues, it became clear that in many cases it would have
+          been ok to interrupt a long running request, skip over the problematic portion and render
+          a partial result, instead of blowing up, or as a sledgehammer approach, removing functionality that worked fine 99% of the
+          time.
         </aside>
       </section>
 
@@ -374,35 +382,42 @@ Traceback (most recent call last):
 RuntimeError
 </code></pre>
         <div class="fragment">
-          <pre><code>from interruptingcow import timeout
+          <pre><code>from interruptingcow import timeout, Quota
 
-class RequestTimeout(Exception): pass
-
-class TimeboxedMiddleware(object):
-    def __init__(self, app):
-        self.app = app
-    
-    @timeout(28, RequestTimeout)
-    def __call__(self, environ, start_response):
-        self.app(environ, start_response)
+quota = Quota(1.0)
+try:
+    with timeout(20.0, OuterTimeout):
+        try:
+            with timeout(quota, InnerTimeout):
+                try_the_expensive_thing_first()
+        except InnerTimeout:
+            do_the_cheap_alternative_instead()
+except OuterTimeout:
+    print 'Program as a whole failed to return in 20 secs'
 </code></pre>
-          <ul>
-              <li>Interrupt any code path by raising custom exceptions</li>
-          </ul>
         </div>
         <aside class="notes">
-            We decided to follow up on this and changed our alarm signal handler into
-            a generic library that can be used to time-box arbitrary chunks of code at any
-            level of the stack. We called it Interruptingcow and here's what it looks like.
-            
-            Here I break out of a busy loop after 2 seconds, raising a RuntimeError.
-            
-            It's also a decorator, which simplifies our timeout middleware.
-            
-            Because it's reentrant and supports arbitrary nesting of independent timeouts,
-            we freely use it in any part of our code, using unique exceptions and catching
-            them in those cases where we are able to perform a cheaper, alternative
-            action.
+          We decided to follow up on this and changed our alarm signal handler into
+          a generic library that can be used to time-box arbitrary chunks of code at any
+          level of the stack. We called it Interruptingcow and here's what it looks like.
+
+          Here I break out of a busy loop after 2 seconds, raising a RuntimeError.
+
+          Timeouts are reentrant which means you can have nested timeouts like
+          this.
+
+          -FRAGMENT-
+
+          Here we have a large timeout wrapping a smaller timeout. The inner
+          timeout time boxes a potentially expensive operation and provides
+          a cheaper alternative version, too.
+
+          Interval values can be simple floats, but you can also use quota
+          objects. A quota represents a particular amount of time that can be
+          shared boxes.
+          Each invocation can only use whatever is left in the quota. If all
+          time is used up, further attempts to use it will immediately raise
+          their timeout exception.
         </aside>
         
       </section>
@@ -490,10 +505,9 @@ with timeout(.1, TimeoutException):
           -FRAGMENT-
           
           We timebox inside a loop here, allocating our time interval as a
-          Quota object that can then be reused in each iteration of the loop.
-          Each invocation can only use whatever is left in the quota. If all
-          time is used up, consecutive timelimit tags will immediately render their else
-          clause.
+          Quota object so that we can guarantee that the total amount of time
+          spent on diffstat computation will never exceed our configured maximum,
+          regardless of the number of loop iterations.
         </aside>
       </section>
 
@@ -513,10 +527,10 @@ with timeout(.1, TimeoutException):
           
           However, the point I want to make is that the best way to guarantee
           responsive web apps is to not have any code with dynamic,
-          unpredictable execution time.
+          unpredictable execution time and there are many ways t accomplish this.
           
           This is a very hard problem and probably something that many of us,
-          myself included, will continue to face throughout our careers. There
+          myself included, will continue to face throughout our careers as developers. There
           is no one-size-fits-all solution and we should continue to be smart
           about it.
           
