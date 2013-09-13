@@ -6,7 +6,7 @@ echo "Cloning evzijst.bitbucket.org into $DEPLOY_DIR..."
 ( cd $DEPLOY_DIR && git clone git@bitbucket.org:evzijst/evzijst.bitbucket.org.git evzijst )
 
 echo "Merging content into site repo..."
-rsync -r --delete slides/* $DEPLOY_DIR/evzijst/pycon.au/
+rsync -r --delete slides/* $DEPLOY_DIR/evzijst/pycon.apac/
 
 ( cd $DEPLOY_DIR/evzijst && \
     git add --all && \
